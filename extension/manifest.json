@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Reply Button Background Changer",
+  "version": "1.0",
+  "description": "Change the background of Reply buttons on x.com with custom images",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ],
+  "icons": {
+    "128": "icon.jpg"
+  }
+} 
