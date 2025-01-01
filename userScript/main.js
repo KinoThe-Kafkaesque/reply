@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Change Reply Button Background with Settings Integration
 // @namespace    http://tampermonkey.net/
-// @version      0.8
+// @version      0.9
 // @description  Change reply button backgrounds with integration into X/Twitter settings page
 // @author       You
 // @match        https://x.com/*
@@ -43,6 +43,7 @@
             color: rgb(231, 233, 234);
             width: 100%;
             margin: 12px 0;
+            cursor: pointer;
         }
         #settings-image-upload:hover {
             border-color: rgb(83, 100, 113);
@@ -91,18 +92,22 @@
             border-radius: 20px;
             cursor: pointer;
             font-weight: bold;
+            font-family: TwitterChirp, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         }
         .crop-button.cancel {
             background: rgb(51, 54, 57);
             color: white;
         }
-        #preview-image {
-            width: 120px;
-            height: 120px;
+       #preview-image {
+            width: 100%;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            max-width: 500px;
+            position: relative;
             border-radius: 8px;
             border: 1px solid rgb(51, 51, 51);
-            background-size: cover;
+            background-size: contain;
             background-position: center;
+            background-repeat: no-repeat;
             margin-bottom: 10px;
         }
         ${GM_getResourceText("CROPPER_CSS")}
@@ -152,6 +157,7 @@
         if (!button.dataset.originalBackground) {
             button.dataset.originalBackground = button.style.background || "";
         }
+        button.style.background = "none";
         button.style.backgroundImage = `url(${imageBase64})`;
         button.style.backgroundSize = "cover";
         button.style.backgroundPosition = "center";
@@ -230,6 +236,8 @@
             reCropButton.className = "crop-button";
             reCropButton.textContent = "Re-crop";
             reCropButton.style.marginTop = "10px";
+            reCropButton.style.fontFamily =
+                "TwitterChirp, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
             previewImage.parentElement.appendChild(reCropButton);
 
             const handleReCrop = () => {
@@ -238,7 +246,7 @@
                     const popup = createCropPopup(originalImage);
                     const image = popup.querySelector("#crop-image");
 
-                    // Free aspect ratio, resizable
+                    // Initialize Cropper
                     const cropper = new Cropper(image, {
                         aspectRatio: null,
                         viewMode: 1,
@@ -261,26 +269,13 @@
                                 height: 400,
                             });
                             const croppedImage = canvas.toDataURL("image/png");
-                            if (
-                                storage.set(
-                                    state.STORAGE_KEY_CROPPED,
-                                    croppedImage,
-                                )
-                            ) {
-                                updatePreviewImage(croppedImage);
-                                // Aggressively apply to reply buttons multiple times
-                                processReplyButtons(croppedImage);
-
-                                // Set up repeated checks to ensure buttons are updated
-                                const updateInterval = setInterval(() => {
-                                    processReplyButtons(croppedImage);
-                                }, 500);
-
-                                // Stop the interval after 5 seconds
-                                setTimeout(() => {
-                                    clearInterval(updateInterval);
-                                }, 5000);
-                            }
+                            storage.set(
+                                state.STORAGE_KEY_CROPPED,
+                                croppedImage,
+                            );
+                            updatePreviewImage(croppedImage);
+                            // Apply to reply buttons
+                            processReplyButtons(croppedImage);
                             cropper.destroy();
                             popup.remove();
                         },
@@ -304,16 +299,16 @@
     const processReplyButtons = _.debounce((imageBase64) => {
         if (!imageBase64) return;
         try {
-            // More aggressive selectors to find reply buttons
+            // More specific selectors to find reply buttons
             const buttons = document.querySelectorAll(
                 'div[role="button"], button',
             );
             buttons.forEach((button) => {
-                const buttonText = button.innerText;
+                const buttonText = button.innerText.trim().toLowerCase();
                 if (
                     button &&
                     button.isConnected &&
-                    (buttonText === "Reply")
+                    (buttonText === "reply" || buttonText === "replying")
                 ) {
                     setButtonBackground(button, imageBase64);
                 }
@@ -343,7 +338,7 @@
                     const popup = createCropPopup(originalImageUrl);
                     const image = popup.querySelector("#crop-image");
 
-                    // Free aspect ratio, resizable
+                    // Initialize Cropper
                     const cropper = new Cropper(image, {
                         aspectRatio: null,
                         viewMode: 1,
@@ -373,18 +368,8 @@
                                 )
                             ) {
                                 updatePreviewImage(croppedImage);
-                                // Aggressively apply to reply buttons multiple times
+                                // Apply to reply buttons
                                 processReplyButtons(croppedImage);
-
-                                // Set up repeated checks to ensure buttons are updated
-                                const updateInterval = setInterval(() => {
-                                    processReplyButtons(croppedImage);
-                                }, 500);
-
-                                // Stop the interval after 5 seconds
-                                setTimeout(() => {
-                                    clearInterval(updateInterval);
-                                }, 5000);
                             }
                             cropper.destroy();
                             popup.remove();
@@ -464,18 +449,22 @@
                         padding: 0;
                       "
                    >
-                   <div class="preview" style="margin-top: 16px;">
-                      <div
-                        id="preview-image"
-                        style="
-                          width: 120px;
-                          height: 120px;
-                          border-radius: 8px;
-                          border: 1px solid rgb(51, 51, 51);
-                          background-size: cover;
-                          background-position: center;
-                        "
-                      ></div>
+                        <div class="preview" style="margin-top: 16px;">
+                        <div
+                            id="preview-image"
+                            style="
+                            display: block;
+                            max-width: 100%;
+                            max-height: 500px;
+                            border-radius: 8px;
+                            border: 1px solid rgb(51, 51, 51);
+                            background-size: contain;
+                            background-position: center;
+                            background-repeat: no-repeat;
+                            margin-bottom: 10px;
+                            "
+                        ></div>
+                        </div>
                    </div>
                 </div>
              </div>
@@ -524,7 +513,10 @@
 
             const spans = replyGuyLink.getElementsByTagName("span");
             for (const span of spans) {
-                if (span.textContent.trim() === "Additional resources") {
+                if (
+                    span.textContent.trim().toLowerCase() ===
+                        "additional resources"
+                ) {
                     span.textContent = "Replyguy/acc";
                     break;
                 }
@@ -535,6 +527,9 @@
             );
             if (helpCenterLink) {
                 menuList.insertBefore(replyGuyLink, helpCenterLink);
+            } else {
+                // If Help Center link not found, append to the end
+                menuList.appendChild(replyGuyLink);
             }
         } catch (error) {
             console.error("Error adding ReplyGuy menu item:", error);
@@ -558,6 +553,28 @@
             );
             addReplyGuyMenuItem(menuList, aboutLink);
         }
+    }
+
+    // History API Interception to detect route changes
+    function interceptHistoryAPI() {
+        const originalPushState = history.pushState;
+        const originalReplaceState = history.replaceState;
+
+        history.pushState = function (...args) {
+            const result = originalPushState.apply(this, args);
+            window.dispatchEvent(new Event("locationchange"));
+            return result;
+        };
+
+        history.replaceState = function (...args) {
+            const result = originalReplaceState.apply(this, args);
+            window.dispatchEvent(new Event("locationchange"));
+            return result;
+        };
+
+        window.addEventListener("popstate", () => {
+            window.dispatchEvent(new Event("locationchange"));
+        });
     }
 
     // Check current page
@@ -587,43 +604,37 @@
             cleanup();
             GM_addStyle(STYLES);
 
-            // Watch for navigation changes
-            let navigationDebounceTimeout;
-            const navigationObserver = new MutationObserver(() => {
-                if (navigationDebounceTimeout) {
-                    clearTimeout(navigationDebounceTimeout);
-                }
-                navigationDebounceTimeout = setTimeout(() => {
-                    if (document.body) checkCurrentPage();
-                }, 250);
-            });
-            if (document.body) {
-                navigationObserver.observe(document.body, {
-                    childList: true,
-                    subtree: true,
-                });
-                state.observers.push(navigationObserver);
-            }
+            // Intercept History API for route change detection
+            interceptHistoryAPI();
 
-            // Watch for button changes
-            let buttonDebounceTimeout;
-            const buttonObserver = new MutationObserver(() => {
-                if (buttonDebounceTimeout) clearTimeout(buttonDebounceTimeout);
-                buttonDebounceTimeout = setTimeout(() => {
-                    const croppedImage = storage.get(state.STORAGE_KEY_CROPPED);
-                    if (croppedImage && document.body) {
-                        processReplyButtons(croppedImage);
-                    }
-                }, 250);
+            // Listen to custom locationchange event
+            const locationChangeHandler = () => {
+                if (document.body) checkCurrentPage();
+                const croppedImage = storage.get(state.STORAGE_KEY_CROPPED);
+                // force a short delay before processing
+                processReplyButtons(croppedImage);
+            };
+
+            addTrackedEventListener(
+                window,
+                "locationchange",
+                locationChangeHandler,
+            );
+
+            // MutationObserver for DOM changes (additional safety)
+            const mutationObserver = new MutationObserver(() => {
+                if (document.body) checkCurrentPage();
+                const croppedImage = storage.get(state.STORAGE_KEY_CROPPED);
+                if (croppedImage) {
+                    processReplyButtons(croppedImage);
+                }
             });
             if (document.body) {
-                buttonObserver.observe(document.body, {
+                mutationObserver.observe(document.body, {
                     childList: true,
                     subtree: true,
-                    attributes: false,
-                    characterData: false,
                 });
-                state.observers.push(buttonObserver);
+                state.observers.push(mutationObserver);
             }
 
             // Initial run
